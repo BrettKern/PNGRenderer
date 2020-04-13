@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <array>
 #include <SDL2/SDL.h>
 
 using namespace std;
@@ -78,10 +79,25 @@ void Image::readIHDRChunk(ifstream& file){
   this->Width = swapEndian(this->Width);
   file.read(reinterpret_cast<char*>(&this->Height), sizeof(this->Height));
   this->Height = swapEndian(this->Height);
+  if (this->Width == 0 || this->Height == 0)
+  {
+    cout << "[ERROR] Width and Height must be non zero values" << endl;
+    exit(EXIT_FAILURE);
+  }
   file.read(reinterpret_cast<char*>(&this->BitDepth), sizeof(this->BitDepth));
   file.read(reinterpret_cast<char*>(&this->ColorType), sizeof(this->ColorType));
   file.read(reinterpret_cast<char*>(&this->CompressionMethod), sizeof(this->CompressionMethod));
+  if (this->CompressionMethod != 0)
+  {
+    cout << "[ERROR] Compression Method must be of type 0" << endl;
+    exit(EXIT_FAILURE);
+  }
   file.read(reinterpret_cast<char*>(&this->FilterMethod), sizeof(this->FilterMethod));
+  if (this->FilterMethod != 0)
+  {
+    cout << "[ERROR] Filter Method must be of type 0" << endl;
+    exit(EXIT_FAILURE);
+  }
   file.read(reinterpret_cast<char*>(&this->InterlaceMethod), sizeof(this->InterlaceMethod));
 
   uint32_t crc;
@@ -114,6 +130,55 @@ void Image::CheckByteOrder(){
 }
 
 bool Image::nextChunk(ifstream& file){
+  //expressions for each possible chunk type to compare against
+  std::array<uint8_t, 4> typeCodePLTE = {'P', 'L', 'T', 'E'};
+  std::array<uint8_t, 4> typeCodesRGB = {'s', 'R', 'G', 'B'};
+  std::array<uint8_t, 4> typeCodeIEND = {'I', 'E', 'N', 'D'};
+  std::array<uint8_t, 4> typeCodeIDAT = {'I', 'D', 'A', 'T'};
+  std::array<uint8_t, 4> typeCodepHYs = {'p', 'H', 'Y', 's'};
+  std::array<uint8_t, 4> typeCodegAMA = {'g', 'A', 'M', 'A'};
+
+  uint32_t chunkLength;
+  file.read(reinterpret_cast<char*>(&chunkLength), sizeof(chunkLength));
+  chunkLength = swapEndian(chunkLength);
+
+  std::array<uint8_t, 4> typeCode;
+  for (int i = 0; i < 4; i++)
+  {
+    file.read(reinterpret_cast<char*>(&typeCode[i]), sizeof(typeCode[i]));
+  }
+
+  uint8_t temp;
+
+  //this is temporary, each individual chunk code check must handle the reading of the data and crc itself
+  for (int i = 0; i < chunkLength + 4; i++)
+  {
+    file.read(reinterpret_cast<char*>(&temp), sizeof(temp));
+  }
+
+  //implementations for handling each different chunk type
+  if (typeCode == typeCodePLTE){
+    cout << "PLTE" << endl;
+    return false;
+  } else if (typeCode == typeCodesRGB){
+    cout << "sRGB" << endl;;
+    return false;
+  } else if (typeCode == typeCodeIDAT) {
+    //deflate algorithm to get raw pixels then write these to a texture for sdl
+    cout << "IDAT" << endl;
+    return false;
+  } else if (typeCode == typeCodegAMA) {
+    cout << "gAMA" << endl;
+    return false;
+  } else if (typeCode == typeCodepHYs) {
+    cout << "pHYs" << endl;
+    return false;
+  } else if (typeCode == typeCodeIEND) {
+    cout << "IEND";
+    return true;
+  }
+
+
 
 }
 
@@ -141,6 +206,16 @@ int main(int argc, char * argv[])
   image.readPNGSignature(infile);//8 byte signature at start of all PNGs
   image.readIHDRChunk(infile);//IHDR chunk is first chunk in all PNGs
   image.printImageStats();
+
+  bool lastChunk = false;
+
+  while(!lastChunk)
+  {
+    lastChunk = image.nextChunk(infile);
+  }
+  cout << "Ending of file" << endl;
+
+  //image.nextChunk(infile);
 
   if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
     return EXIT_FAILURE;
